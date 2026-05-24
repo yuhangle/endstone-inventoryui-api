@@ -1,0 +1,169 @@
+name: Build InventoryUI
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_static:
+        description: '构建静态库模式'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      publish_release:
+        description: '发布 Release'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # ===== Linux =====
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release software-properties-common unzip zip
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 19
+          sudo apt-get install -y libc++-19-dev libc++abi-19-dev cmake ninja-build
+
+      - name: Configure CMake (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          git config --global --remove-section http || true
+          echo "machine github.com login x-access-token password ${{ secrets.PRIVATE_TOKEN }}" > ~/.netrc
+          chmod 600 ~/.netrc
+
+          EXTRA_ARGS=""
+          if [ "${{ github.event.inputs.build_static }}" = "true" ]; then
+            EXTRA_ARGS="-DINVENTORYUI_BUILD_AS_STATIC=ON"
+          fi
+
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_C_COMPILER=clang-19 \
+                -DCMAKE_CXX_COMPILER=clang++-19 \
+                -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+                $EXTRA_ARGS
+
+      # ===== Windows =====
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
+
+      - name: Set up CMake and Ninja
+        if: runner.os == 'Windows'
+        uses: lukka/get-cmake@latest
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          git config --global --remove-section http 2>$null
+          $NetrcPath = Join-Path $HOME "_netrc"
+          "machine github.com login x-access-token password ${{ secrets.PRIVATE_TOKEN }}" | Out-File -FilePath $NetrcPath -Encoding ascii -Force
+
+          $EXTRA_ARGS = @()
+          if ("${{ github.event.inputs.build_static }}" -eq "true") {
+            $EXTRA_ARGS += "-DINVENTORYUI_BUILD_AS_STATIC=ON"
+          }
+
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release $EXTRA_ARGS
+
+      # ===== Build =====
+      - name: Build
+        run: cmake --build build --config Release
+
+      # ===== Package =====
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p package
+          if [ "${{ github.event.inputs.build_static }}" = "true" ]; then
+            cp build/libendstone_inventoryui.a package/
+            cd package && zip -r ../inventoryui_static_linux.zip libendstone_inventoryui.a
+          else
+            SO_FILE=$(find build -name "endstone_inventoryui.so" | head -n 1)
+            if [ -z "$SO_FILE" ]; then exit 1; fi
+            cp "$SO_FILE" package/endstone_inventoryui.so
+            cd package && zip -r ../inventoryui_linux.zip endstone_inventoryui.so
+          fi
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package -Force
+          if ("${{ github.event.inputs.build_static }}" -eq "true") {
+            $LIB_FILE = Get-ChildItem -Path build -Filter "*.a" -Recurse | Select-Object -First 1
+            Copy-Item $LIB_FILE.FullName package/libendstone_inventoryui.a
+            cd package
+            Compress-Archive -Path libendstone_inventoryui.a -DestinationPath ../inventoryui_static_windows.zip
+          } else {
+            $DLL_FILE = Get-ChildItem -Path build -Filter "*inventoryui.dll" -Recurse | Select-Object -First 1
+            if ($null -eq $DLL_FILE) { exit 1 }
+            Copy-Item $DLL_FILE.FullName package/endstone_inventoryui.dll
+            cd package
+            Compress-Archive -Path endstone_inventoryui.dll -DestinationPath ../inventoryui_windows.zip
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: inventoryui-plugin-${{ runner.os }}
+          path: inventoryui_*.zip
+          retention-days: 7
+
+  release:
+    name: Publish Release
+    needs: build
+    if: ${{ github.event.inputs.publish_release == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: inventoryui-plugin-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.sha }}
+          name: "Build ${{ github.sha }}"
+          draft: false
+          prerelease: true
+          files: artifacts/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.PRIVATE_TOKEN }}

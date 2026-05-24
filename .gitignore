@@ -1,0 +1,8 @@
+/.claude/
+/backup/
+/build/
+/build-static/
+/cmake-build-relwithdebinfo/
+/docs/
+/CLAUDE.md
+/.idea/
