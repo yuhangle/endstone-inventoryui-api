@@ -51,10 +51,6 @@ jobs:
       - name: Configure CMake (Linux)
         if: runner.os == 'Linux'
         run: |
-          git config --global --remove-section http || true
-          echo "machine github.com login x-access-token password ${{ secrets.PRIVATE_TOKEN }}" > ~/.netrc
-          chmod 600 ~/.netrc
-
           EXTRA_ARGS=""
           if [ "${{ github.event.inputs.build_static }}" = "true" ]; then
             EXTRA_ARGS="-DINVENTORYUI_BUILD_AS_STATIC=ON"
@@ -81,10 +77,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          git config --global --remove-section http 2>$null
-          $NetrcPath = Join-Path $HOME "_netrc"
-          "machine github.com login x-access-token password ${{ secrets.PRIVATE_TOKEN }}" | Out-File -FilePath $NetrcPath -Encoding ascii -Force
-
           $EXTRA_ARGS = @()
           if ("${{ github.event.inputs.build_static }}" -eq "true") {
             $EXTRA_ARGS += "-DINVENTORYUI_BUILD_AS_STATIC=ON"
@@ -166,4 +158,4 @@ jobs:
           prerelease: true
           files: artifacts/*.zip
         env:
-          GITHUB_TOKEN: ${{ secrets.PRIVATE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
