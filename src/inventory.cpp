@@ -1,4 +1,5 @@
 #include "inventory.h"
+#include "item_registry.h"
 
 #include <endstone/endstone.hpp>
 
@@ -22,6 +23,32 @@ endstone::ItemStack UIInventory::getItem(const int index) const
 {
     if (!isValidIndex(index)) {
         throw std::out_of_range("Slot index " + std::to_string(index) + " out of range");
+    }
+    // If the slot has a real item, return it directly
+    if (slots_[index].getType().getId() != "minecraft:air") {
+        return slots_[index];
+    }
+    // Check for pre-encoded item and construct a proper ItemStack with NBT
+    if (hasPreEncodedItem(index)) {
+        const auto* pe = getPreEncodedItem(index);
+        try {
+            endstone::ItemStack result(pe->type_id, pe->count, pe->damage);
+            if (!pe->nbt_bytes.empty()) {
+                try {
+                    auto rust_tag = CompoundTag::fromBinaryNbt(pe->nbt_bytes.data(), pe->nbt_bytes.size(), true);
+                    endstone::CompoundTag endstone_nbt;
+                    rustNbtToEndstone(rust_tag, endstone_nbt);
+                    if (!endstone_nbt.empty()) {
+                        result.setNbt(endstone_nbt);
+                    }
+                } catch (...) {
+                    // NBT parsing failed — item without NBT still usable
+                }
+            }
+            return result;
+        } catch (const std::exception &) {
+            return endstone::ItemStack("minecraft:air");
+        }
     }
     return slots_[index];
 }

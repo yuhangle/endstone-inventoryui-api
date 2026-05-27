@@ -30,11 +30,10 @@ void EventListener::onPacketReceive(
 
         if (pk.container_id != static_cast<uint8_t>(Menu::CONTAINER_ID)) return;
 
-        auto *form = it->second.get();
-        auto *menu = form->menu;
+        const auto *form = it->second.get();
 
         // Fire close listener
-        if (menu && menu->getCloseListener()) {
+        if (const auto *menu = form->menu; menu && menu->getCloseListener()) {
             menu->getCloseListener()(*player);
         }
 
@@ -52,26 +51,31 @@ void EventListener::onPacketReceive(
     }
     else if (packet_id == static_cast<int>(MinecraftPacketIds::ItemStackRequest)) {
         auto &forms = getActiveForms();
-        auto it = forms.find(player->getName());
+      const auto it = forms.find(player->getName());
         if (it == forms.end()) return;
 
-        auto *form = it->second.get();
-        auto *menu = form->menu;
+        const auto *form = it->second.get();
+        const auto *menu = form->menu;
         if (!menu) return;
 
         ItemStackRequestPacket pk;
         pk.deserialize({event.getPayload().data(), event.getPayload().data() + event.getPayload().size()});
 
         for (const auto &req_data : pk.request.request_data) {
-            for (const auto &action : req_data.request_actions) {
-                if (action.action_type == ItemStackRequestActionType::Take ||
-                    action.action_type == ItemStackRequestActionType::Place) {
-                    int slot = action.action_data->source.slot;
-                    int source_id = action.action_data->source.container.container_enum;
-                    if (source_id != 7) return;  // LEVEL_ENTITY
+            for (const auto &[action_type_, action_data_] : req_data.request_actions) {
+            const int action_type = action_type_;
+                if (!action_data_) continue;
+
+                if (action_type == 0 ||
+                    action_type == ItemStackRequestActionType::Take ||
+                    action_type == ItemStackRequestActionType::Place) {
+                  const int slot = action_data_->source.slot;
+                  if (const int source_id =
+                          action_data_->source.container.container_enum;
+                      source_id != 7) continue;
 
                     if (menu->getListener()) {
-                        auto item = menu->getInventoryRef().getItem(slot);
+                    const auto item = menu->getInventoryRef().getItem(slot);
                         menu->getListener()(*player, slot, item, menu->getInventoryRef());
                         return;
                     }

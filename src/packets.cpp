@@ -142,7 +142,8 @@ void ItemStackRequestAction::write(const BinaryStream &s) const
 void ItemStackRequestAction::read(const ReadOnlyBinaryStream &s)
 {
     action_type = s.getByte();
-    if (action_type == ItemStackRequestActionType::Take ||
+    if (action_type == 0 ||
+        action_type == ItemStackRequestActionType::Take ||
         action_type == ItemStackRequestActionType::Place)
     {
         auto data = std::make_unique<ItemStackRequestActionTransferBase>();
@@ -174,31 +175,20 @@ void ItemStackRequestData::write(const BinaryStream &s) const
 void ItemStackRequestData::read(const ReadOnlyBinaryStream &s)
 {
     is_parsable_action = true;
-    auto read_pos = s.getPosition();
     client_request_id = s.getVarint();
     auto actions_len = s.getUnsignedVarint();
     request_actions.reserve(actions_len);
     for (uint32_t i = 0; i < actions_len; ++i) {
         ItemStackRequestAction action;
         action.read(s);
-        if (action.action_data) {
-            request_actions.push_back(std::move(action));
-        } else {
-            is_parsable_action = false;
-            break;
-        }
+        request_actions.push_back(std::move(action));
     }
-    if (is_parsable_action) {
-        auto stf_len = s.getUnsignedVarint();
-        strings_to_filter.reserve(stf_len);
-        for (uint32_t i = 0; i < stf_len; ++i) {
-            strings_to_filter.push_back(s.getBytes());
-        }
-        strings_to_filter_origin = s.getSignedInt();
-    } else {
-        s.setPosition(read_pos);
-        request_buffer = s.readRawBytes(s.getSize() - s.getPosition());
+    auto stf_len = s.getUnsignedVarint();
+    strings_to_filter.reserve(stf_len);
+    for (uint32_t i = 0; i < stf_len; ++i) {
+        strings_to_filter.push_back(s.getBytes());
     }
+    strings_to_filter_origin = s.getSignedInt();
 }
 
 // ==================== ItemStackRequest ====================
@@ -372,8 +362,8 @@ std::vector<uint8_t> readNetworkNbt(const ReadOnlyBinaryStream &s)
 
         switch (field_type) {
         case 1: (void)s.getByte(); break;                                                             // TAG_Byte
-        case 2: (void)zigzag(s.getUnsignedVarint()); break;                                           // TAG_Short (zigzag)
-        case 3: (void)zigzag(s.getUnsignedVarint()); break;                                           // TAG_Int (zigzag)
+        case 2:  // TAG_Short / TAG_Int — both zigzag varint in Bedrock network format
+        case 3: (void)zigzag(s.getUnsignedVarint()); break;
         case 4: (void)s.getVarint64(); break;                                                         // TAG_Long
         case 5: (void)s.getFloat(); break;
         case 6: (void)s.getDouble(); break;

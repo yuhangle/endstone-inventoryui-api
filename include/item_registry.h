@@ -1,6 +1,7 @@
 #pragma once
 
 #include "packets.h"
+#include "bedrock_nbt.h"
 
 #include <endstone/endstone.hpp>
 
@@ -30,3 +31,9 @@ void clearItemData();
 /// Build NBT data from an Endstone ItemStack's ItemMeta.
 /// Returns empty vector if no metadata is present.
 [[nodiscard]] std::vector<uint8_t> buildItemNbt(const endstone::ItemStack &item_stack);
+
+// ==================== Rust CompoundTag → Endstone CompoundTag ====================
+
+/// Convert a Rust-backed CompoundTag to an Endstone CompoundTag.
+/// Recursively converts all nested compounds and lists.
+void rustNbtToEndstone(const CompoundTag &rust_tag, endstone::CompoundTag &endstone_tag);

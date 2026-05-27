@@ -105,7 +105,29 @@ bool bedrock_nbt_empty(const void *nbt);
 bool bedrock_nbt_contains(const void *nbt, const char *key);
 
 int bedrock_nbt_from_network_into(void *nbt, const uint8_t *data, size_t len, size_t *consumed);
+int bedrock_nbt_from_binary_into(void *nbt, const uint8_t *data, size_t len, bool little_endian, size_t *consumed);
 int bedrock_nbt_write_to_stream(void *nbt, void *stream);
+
+size_t bedrock_nbt_entry_count(const void *nbt);
+const char *bedrock_nbt_entry_key_at(const void *nbt, size_t index);
+int bedrock_nbt_entry_key_copy(const void *nbt, size_t index, char *buffer, size_t *inout_len);
+int bedrock_nbt_entry_type_at(const void *nbt, size_t index);
+
+int bedrock_nbt_get_byte(const void *nbt, const char *key, int8_t *out);
+int bedrock_nbt_get_short(const void *nbt, const char *key, int16_t *out);
+int bedrock_nbt_get_long(const void *nbt, const char *key, int64_t *out);
+int bedrock_nbt_get_float(const void *nbt, const char *key, float *out);
+int bedrock_nbt_get_double(const void *nbt, const char *key, double *out);
+int bedrock_nbt_get_string(const void *nbt, const char *key, char *buffer, size_t *inout_len);
+
+void *bedrock_nbt_get_tag(const void *nbt, const char *key);
+int bedrock_nbt_get_byte_array(const void *nbt, const char *key, uint8_t **out_data, size_t *out_len);
+int bedrock_nbt_get_int_array(const void *nbt, const char *key, int32_t **out_data, size_t *out_len);
+
+int bedrock_nbt_list_size(const void *nbt, const char *key);
+int bedrock_nbt_list_get_element_type(const void *nbt, const char *key);
+void *bedrock_nbt_list_get_tag_at(const void *nbt, const char *key, int32_t index);
+int bedrock_nbt_list_get_string_at(const void *nbt, const char *key, int32_t index, char *buffer, size_t *inout_len);
 
 // ==================== BlockPos ====================
 

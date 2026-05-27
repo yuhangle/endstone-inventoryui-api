@@ -9,11 +9,11 @@ Endstone 虚拟容器界面插件。支持两种使用方式：
 
 ```
 include/
-├── bedrock_ffi.h          ← Rust C FFI 声明
+├── bedrock_ffi.h          ← Rust C FFI 声明（35 个 NBT 函数）
 ├── bedrock_stream.h       ← BinaryStream RAII 包装
-├── bedrock_nbt.h          ← CompoundTag RAII 包装
+├── bedrock_nbt.h          ← CompoundTag RAII 包装（含 fromBinaryNbt、枚举、类型读取）
 ├── packets.h              ← 数据包类型定义
-├── item_registry.h        ← 物品注册表缓存
+├── item_registry.h        ← 物品注册表 + Rust→Endstone NBT 转换器
 ├── menu_type.h            ← 菜单类型枚举 + 属性
 ├── inventory.h            ← UIInventory 实现
 ├── menu.h                 ← Menu 接口
@@ -27,11 +27,11 @@ include/
 src/
 ├── inventoryui_init.cpp   ← 内嵌模式初始化实现
 ├── plugin.cpp             ← 插件入口（外置插件模式）
-├── packets.cpp            ← 数据包序列化
+├── packets.cpp            ← 数据包序列化/反序列化
 ├── menu.cpp               ← Menu 实现
-├── inventory.cpp          ← UIInventory 实现
-├── listener.cpp           ← 事件处理
-└── item_registry.cpp      ← 物品注册表
+├── inventory.cpp          ← UIInventory 实现（含预编码 NBT → ItemStack）
+├── listener.cpp           ← 事件处理（ItemStackRequest 包拦截）
+└── item_registry.cpp      ← 物品注册表 + Rust↔Endstone NBT 双向转换
 examples/cpp/              ← 使用示例
 ```
 
@@ -200,7 +200,19 @@ auto inv = menu->get_inventory();
 inv->set_pre_encoded_item(slot, "minecraft:diamond_sword", 1, 0, nbt_bytes);
 ```
 
-> 使用 `set_pre_encoded_item()` 的槽位在 `sendContents()` 时会优先使用预编码数据，忽略同槽位的 `ItemStack`。菜单对象的生命周期需要由调用方管理（`send_to()` 内部使用延迟发送，菜单销毁后不会显示）。
+> 使用 `set_pre_encoded_item()` 的槽位在 `sendContents()` 时会优先使用预编码数据，忽略同槽位的 `ItemStack`。
+
+#### 点击回调获取完整 NBT
+
+预编码槽位被点击时，`getItem()` 会自动将预编码数据反序列化为完整的 `endstone::ItemStack`（含 NBT 元数据）。转换流程：
+
+```
+预编码 NBT 字节 → Rust CompoundTag(fromBinaryNbt)
+                → Endstone CompoundTag(rustNbtToEndstone)
+                → endstone::ItemStack.setNbt()
+```
+
+因此 `set_listener()` 回调中拿到的 `item` 参数与普通 ItemStack 一样可读可写。
 
 ### 注册回调
 
