@@ -50,7 +50,7 @@ public:
     virtual ~Menu() = default;
 
     // Callback types
-    using SlotCallback = std::function<void(
+    using SlotCallback = std::function<std::function<void()>(
         endstone::Player &player, int slot,
         const endstone::ItemStack &item,
         UIInventory &inventory)>;

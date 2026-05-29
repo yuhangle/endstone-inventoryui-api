@@ -13,7 +13,7 @@ class Menu;
 // ==================== Per-player form tracking ====================
 
 struct FormData {
-    Menu *menu{};
+    std::shared_ptr<Menu> menu;
     endstone::Player *player{};
     BlockPos pos;
     bool is_pair{};

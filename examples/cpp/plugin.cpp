@@ -40,10 +40,11 @@ public:
         menu->set_listener(
             [](endstone::Player &player, int slot,
                const endstone::ItemStack &item,
-               inventoryui::UIInventory &inventory) {
+               inventoryui::UIInventory &inventory) -> std::function<void()> {
                 player.sendMessage(
                     "You clicked slot " + std::to_string(slot)
                     + " (" + item.getType().getId() + ")");
+                return {};  // 不关闭物品栏
             });
 
         menu->set_open_listener([](endstone::Player &player) {

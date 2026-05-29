@@ -33,7 +33,7 @@ void EventListener::onPacketReceive(
         const auto *form = it->second.get();
 
         // Fire close listener
-        if (const auto *menu = form->menu; menu && menu->getCloseListener()) {
+        if (const auto &menu = form->menu; menu && menu->getCloseListener()) {
             menu->getCloseListener()(*player);
         }
 
@@ -55,7 +55,7 @@ void EventListener::onPacketReceive(
         if (it == forms.end()) return;
 
         const auto *form = it->second.get();
-        const auto *menu = form->menu;
+        const auto &menu = form->menu;
         if (!menu) return;
 
         ItemStackRequestPacket pk;
@@ -76,7 +76,40 @@ void EventListener::onPacketReceive(
 
                     if (menu->getListener()) {
                     const auto item = menu->getInventoryRef().getItem(slot);
-                        menu->getListener()(*player, slot, item, menu->getInventoryRef());
+                      if (auto deferred = menu->getListener()(
+                              *player, slot, item, menu->getInventoryRef())) {
+                            // 关闭物品栏UI，但不触发close_listener
+                            const auto player_name = player->getName();
+                            auto& forms1 = getActiveForms();
+                            if (const auto form_it = forms1.find(player_name);
+                                form_it != forms1.end()) {
+                                const auto *form2 = form_it->second.get();
+                                const auto pos = form2->pos;
+                                const auto is_pair = form2->is_pair;
+
+                                // 从ActiveForms移除，后续客户端回复ContainerClose时不会触发close_listener
+                                forms1.erase(form_it);
+
+                                // 发送ContainerClose关闭客户端物品栏
+                                ContainerClosePacket close_pk;
+                                close_pk.container_id = Menu::CONTAINER_ID;
+                                close_pk.is_server_side = true;
+                                sendPacket(*player, close_pk);
+
+                                // 恢复假方块
+                                restoreBlock(*player, pos);
+                                if (is_pair) {
+                                    restoreBlock(*player, BlockPos(pos.x + 1, pos.y, pos.z));
+                                }
+                            }
+
+                            // 延迟执行回调中的表单发送逻辑
+                            auto& scheduler = plugin_.getServer().getScheduler();
+                            scheduler.runTaskLater(
+                                plugin_,
+                                [fn = std::move(deferred)]() { fn(); },
+                                10);
+                        }
                         return;
                     }
                 }
@@ -94,7 +127,7 @@ void EventListener::onPacketSend(const endstone::PacketSendEvent &event) const {
         if (allItemData().empty()) {
             try {
                 ItemRegistryPacket pk;
-                auto payload = event.getPayload();
+              const auto payload = event.getPayload();
                 pk.deserialize({reinterpret_cast<const uint8_t *>(payload.data()),
                                 reinterpret_cast<const uint8_t *>(payload.data()) + payload.size()});
                 log.debug("ItemRegistryPacket: deserialized {} items", pk.item_registry.size());

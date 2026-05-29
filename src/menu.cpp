@@ -5,7 +5,6 @@
 #include "bedrock_nbt.h"
 
 #include <endstone/endstone.hpp>
-#include <ranges>
 
 // ==================== Menu ====================
 
@@ -21,8 +20,7 @@ Menu::~Menu()
 { Menu::close_all();
 }
 
-void Menu::sendTo(endstone::Player &player)
-{
+void Menu::sendTo(endstone::Player &player, const std::shared_ptr<Menu>& self) const {
     auto &forms = getActiveForms();
     auto player_name = player.getName();
 
@@ -62,7 +60,7 @@ void Menu::sendTo(endstone::Player &player)
 
     // Register the active form immediately
     auto form = std::make_unique<FormData>();
-    form->menu = this;
+    form->menu = self;
     form->player = &player;
     form->pos = pos;
     form->is_pair = data.is_pair;
@@ -76,7 +74,7 @@ void Menu::sendTo(endstone::Player &player)
     const auto ctype = data.container_type;
     plugin_.getServer().getScheduler().runTaskLater(
         plugin_,
-        [this, server, ctype, pos_copy, name_copy]() {
+        [self, server, ctype, pos_copy, name_copy]() {
             auto *player1 = server->getPlayer(name_copy);
             if (!player1) return;
 
@@ -84,17 +82,17 @@ void Menu::sendTo(endstone::Player &player)
             auto &forms1 = getActiveForms();
             const auto it = forms1.find(name_copy);
             if (it == forms1.end()) return;
-            if (it->second->menu != this) return;
+            if (it->second->menu.get() != self.get()) return;
 
             const ContainerOpenPacket open_pk(cid, ctype, pos_copy);
             sendPacket(*player1, open_pk);
 
             // Send inventory contents
-            sendContents(*player1);
+            self->sendContents(*player1);
 
             // Fire open listener now that the UI is actually opening
-            if (open_listener_) {
-                open_listener_(*player1);
+            if (self->open_listener_) {
+                self->open_listener_(*player1);
             }
         },
         10);
@@ -149,13 +147,13 @@ void Menu::sendContents(const endstone::Player &player) const {
                       {reinterpret_cast<const char *>(payload.data()), payload.size()});
 }
 
-void Menu::send_to(endstone::Player &player) { sendTo(player); }
+void Menu::send_to(endstone::Player &player) { sendTo(player, shared_from_this()); }
 
 bool Menu::close(endstone::Player &player)
 {
     auto &forms = getActiveForms();
-    auto it = forms.find(player.getName());
-    if (it == forms.end() || it->second->menu != this) return false;
+  const auto it = forms.find(player.getName());
+    if (it == forms.end() || it->second->menu.get() != this) return false;
 
     // Send ContainerClose (server-initiated) to the client
     ContainerClosePacket close_pk;
@@ -170,9 +168,9 @@ bool Menu::close(endstone::Player &player)
         restoreBlock(player, BlockPos(form->pos.x + 1, form->pos.y, form->pos.z));
     }
 
-    // Fire close listener
-    if (close_listener_) {
-        close_listener_(player);
+    // Fire close listener (use shared_ptr from FormData to keep menu alive)
+    if (form->menu && form->menu->close_listener_) {
+        form->menu->close_listener_(player);
     }
 
     forms.erase(it);
@@ -183,7 +181,7 @@ void Menu::closeAll() const {
     // Collect player names for this menu, then close each
     std::vector<std::string> to_close;
     for (const auto &[name, form] : getActiveForms()) {
-        if (form->menu == this) {
+        if (form->menu.get() == this) {
             to_close.push_back(name);
         }
     }
@@ -200,8 +198,8 @@ void Menu::closeAll() const {
                 if (form->is_pair) {
                     restoreBlock(*player, BlockPos(form->pos.x + 1, form->pos.y, form->pos.z));
                 }
-                if (close_listener_) {
-                    close_listener_(*player);
+                if (form->menu && form->menu->close_listener_) {
+                    form->menu->close_listener_(*player);
                 }
             }
             forms.erase(it);
@@ -209,15 +207,18 @@ void Menu::closeAll() const {
     }
 }
 
-void Menu::close_all() { closeAll(); }
-
-std::vector<endstone::Player *> Menu::getViewers() const
-{
-    std::vector<endstone::Player *> players;
-    for (const auto &form : getActiveForms() | std::views::values) {
-        if (form->menu == this) {
-            players.push_back(form->player);
+void Menu::close_all() {
+    // Called from destructor — cannot use shared_from_this().
+    // Just erase all forms for this menu from ActiveForms.
+    // The shared_ptr in FormData will be released, potentially destroying this menu.
+    std::vector<std::string> to_erase;
+    for (const auto &[name, form] : getActiveForms()) {
+        if (form->menu.get() == this) {
+            to_erase.push_back(name);
         }
     }
-    return players;
+    for (const auto &name : to_erase) {
+        getActiveForms().erase(name);
+    }
 }
+

@@ -1,5 +1,7 @@
 # InventoryUI
 
+[English](README.en.md)
+
 Endstone 虚拟容器界面插件。支持两种使用方式：
 
 - **内嵌模式** — 编译为静态库嵌入宿主插件，不依赖单独的 `.so`
@@ -218,11 +220,31 @@ inv->set_pre_encoded_item(slot, "minecraft:diamond_sword", 1, 0, nbt_bytes);
 
 ```cpp
 // 点击回调
+// 返回 std::function<void()>：非空时关闭物品栏 UI 并延迟 10 tick 执行返回的函数
+// 返回空函数（默认）：不关闭物品栏
 menu->set_listener(
     [](endstone::Player &player, int slot,
        const endstone::ItemStack &item,
-       inventoryui::UIInventory &inventory) {
+       inventoryui::UIInventory &inventory) -> std::function<void()> {
         player.sendMessage("slot {}: {}", slot, item.getType().getId());
+        return {};  // 不关闭物品栏
+    });
+
+// 需要关闭物品栏并打开新表单的示例
+menu->set_listener(
+    [&plugin](endstone::Player &player, int slot,
+              const endstone::ItemStack &item,
+              inventoryui::UIInventory &inventory) -> std::function<void()> {
+        auto item_data = ItemSerializer::fromItemStack(item);
+        // 返回延迟任务：物品栏关闭后 10 tick 执行
+        return [&plugin, player_name = player.getName(), item_data]() {
+            auto *p = plugin.getServer().getPlayer(player_name);
+            if (!p) return;
+            // 在此处发送 ModalForm 等新表单
+            endstone::ModalForm form;
+            form.setTitle("确认");
+            p->sendForm(form);
+        };
     });
 
 // 打开回调
@@ -230,7 +252,7 @@ menu->set_open_listener([](endstone::Player &player) {
     player.sendMessage("Menu opened");
 });
 
-// 关闭回调
+// 关闭回调（由客户端主动关闭时触发）
 menu->set_close_listener([](endstone::Player &player) {
     player.sendMessage("Menu closed");
 });

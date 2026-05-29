@@ -13,7 +13,7 @@
 
 // ==================== Menu ====================
 
-class Menu : public inventoryui::Menu {
+class Menu : public inventoryui::Menu, public std::enable_shared_from_this<Menu> {
 public:
     static constexpr int CONTAINER_ID = 200;
 
@@ -25,8 +25,8 @@ public:
 
     // --- inventoryui::Menu interface (snake_case) ---
 
-    std::string get_name() const override { return getName(); }
-    void set_name(const std::string &name) override { setName(name); }
+    std::string get_name() const override { return name_; }
+    void set_name(const std::string &name) override { name_ = name; }
 
     inventoryui::MenuTypeId get_type() const override
     {
@@ -43,13 +43,8 @@ public:
 
     std::vector<std::shared_ptr<endstone::Player>> get_viewers() const override
     {
-        std::vector<std::shared_ptr<endstone::Player>> result;
-        for (auto *p : getViewers()) {
-            // We cannot create a shared_ptr from a raw Player reference
-            // without ownership semantics; return empty for safety.
-            (void)p;
-        }
-        return result;
+        // Not implemented — callers should use close_player / ActiveForms directly.
+        return {};
     }
 
     std::shared_ptr<inventoryui::UIInventory> get_inventory() const override
@@ -59,19 +54,7 @@ public:
 
     // --- Internal API (camelCase) ---
 
-    std::string getName() const { return name_; }
-    void setName(const std::string &name) { name_ = name; }
-
-    MenuTypeId getType() const { return type_; }
-
-    std::shared_ptr<UIInventory> getInventory() const { return inventory_; }
-
-    void setListener(SlotCallback callback) { listener_ = std::move(callback); }
-    void setOpenListener(PlayerCallback callback) { open_listener_ = std::move(callback); }
-    void setCloseListener(PlayerCallback callback) { close_listener_ = std::move(callback); }
-
     const SlotCallback &getListener() const { return listener_; }
-    const PlayerCallback &getOpenListener() const { return open_listener_; }
     const PlayerCallback &getCloseListener() const { return close_listener_; }
 
     // --- Internal helpers ---
@@ -80,10 +63,8 @@ public:
 
     // --- Actions (camelCase aliases) ---
 
-    void sendTo(endstone::Player &player);
+    void sendTo(endstone::Player &player, const std::shared_ptr<Menu>& self) const;
     void closeAll() const;
-
-    std::vector<endstone::Player *> getViewers() const;
 
     UIInventory &getInventoryRef() const { return *inventory_; }
 
