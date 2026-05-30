@@ -30,21 +30,31 @@ void EventListener::onPacketReceive(
 
         if (pk.container_id != static_cast<uint8_t>(Menu::CONTAINER_ID)) return;
 
-        const auto *form = it->second.get();
+        // Copy data needed after erase
+        const auto pos = it->second->pos;
+        const auto is_pair = it->second->is_pair;
+        auto close_listener = it->second->menu ? it->second->menu->getCloseListener() : Menu::PlayerCallback{};
 
-        // Fire close listener
-        if (const auto &menu = form->menu; menu && menu->getCloseListener()) {
-            menu->getCloseListener()(*player);
-        }
+        // Erase form BEFORE firing close_listener to prevent iterator invalidation
+        // (close_listener may call send_to which also erases from getActiveForms)
+        forms.erase(it);
 
         // Restore original blocks
-        restoreBlock(*player, form->pos);
-        if (form->is_pair) {
-            restoreBlock(*player, BlockPos(form->pos.x + 1, form->pos.y, form->pos.z));
+        restoreBlock(*player, pos);
+        if (is_pair) {
+            restoreBlock(*player, BlockPos(pos.x + 1, pos.y, pos.z));
         }
 
-        // Clean up
-        forms.erase(it);
+        // Defer close_listener to avoid re-entrant map modification
+        if (close_listener) {
+            const auto player_name = player->getName();
+            plugin_.getServer().getScheduler().runTaskLater(
+                plugin_,
+                [&plugin = plugin_, fn = std::move(close_listener), player_name]() {
+                  if (auto *p = plugin.getServer().getPlayer(player_name)) fn(*p);
+                },
+                1);
+        }
     }
     else if (packet_id == static_cast<int>(MinecraftPacketIds::PacketViolationWarning)) {
         // Client-side container rejection — ignore in simplified architecture

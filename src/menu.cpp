@@ -155,25 +155,31 @@ bool Menu::close(endstone::Player &player)
   const auto it = forms.find(player.getName());
     if (it == forms.end() || it->second->menu.get() != this) return false;
 
+    // Copy data needed after erase
+    const auto pos = it->second->pos;
+    const auto is_pair = it->second->is_pair;
+    const auto close_listener = it->second->menu ? it->second->menu->close_listener_ : PlayerCallback{};
+
     // Send ContainerClose (server-initiated) to the client
     ContainerClosePacket close_pk;
     close_pk.container_id = CONTAINER_ID;
     close_pk.is_server_side = true;
     sendPacket(player, close_pk);
 
-    // Restore original blocks
-    const auto *form = it->second.get();
-    restoreBlock(player, form->pos);
-    if (form->is_pair) {
-        restoreBlock(player, BlockPos(form->pos.x + 1, form->pos.y, form->pos.z));
-    }
-
-    // Fire close listener (use shared_ptr from FormData to keep menu alive)
-    if (form->menu && form->menu->close_listener_) {
-        form->menu->close_listener_(player);
-    }
-
+    // Erase form BEFORE firing close_listener to prevent iterator invalidation
     forms.erase(it);
+
+    // Restore original blocks
+    restoreBlock(player, pos);
+    if (is_pair) {
+        restoreBlock(player, BlockPos(pos.x + 1, pos.y, pos.z));
+    }
+
+    // Fire close listener
+    if (close_listener) {
+        close_listener(player);
+    }
+
     return true;
 }
 
@@ -189,20 +195,29 @@ void Menu::closeAll() const {
         auto &forms = getActiveForms();
       if (auto it = forms.find(name); it != forms.end()) {
           if (auto *player = it->second->player) {
-          const auto *form = it->second.get();
+          // Copy data needed after erase
+          const auto pos = it->second->pos;
+          const auto is_pair = it->second->is_pair;
+          auto close_listener = it->second->menu ? it->second->menu->close_listener_ : PlayerCallback{};
+
                 ContainerClosePacket close_pk;
                 close_pk.container_id = CONTAINER_ID;
                 close_pk.is_server_side = true;
                 sendPacket(*player, close_pk);
-                restoreBlock(*player, form->pos);
-                if (form->is_pair) {
-                    restoreBlock(*player, BlockPos(form->pos.x + 1, form->pos.y, form->pos.z));
+
+                // Erase form BEFORE firing close_listener
+                forms.erase(it);
+
+                restoreBlock(*player, pos);
+                if (is_pair) {
+                    restoreBlock(*player, BlockPos(pos.x + 1, pos.y, pos.z));
                 }
-                if (form->menu && form->menu->close_listener_) {
-                    form->menu->close_listener_(*player);
+                if (close_listener) {
+                    close_listener(*player);
                 }
-            }
-            forms.erase(it);
+          } else {
+              forms.erase(it);
+          }
         }
     }
 }
