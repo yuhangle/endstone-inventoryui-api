@@ -75,6 +75,9 @@ public:
 
     virtual void close_all() = 0;
 
+    /// 刷新物品栏内容到客户端（修改物品后调用此方法更新显示）
+    virtual void refresh_contents(endstone::Player &player) = 0;
+
     [[nodiscard]] virtual std::vector<std::shared_ptr<endstone::Player>> get_viewers() const = 0;
 
     [[nodiscard]] virtual std::shared_ptr<UIInventory> get_inventory() const = 0;

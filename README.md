@@ -221,13 +221,13 @@ inv->set_pre_encoded_item(slot, "minecraft:diamond_sword", 1, 0, nbt_bytes);
 ```cpp
 // 点击回调
 // 返回 std::function<void()>：非空时关闭物品栏 UI 并延迟 10 tick 执行返回的函数
-// 返回空函数（默认）：不关闭物品栏
+// 返回空函数（默认）：不关闭物品栏，且自动刷新物品栏显示（适用于动态修改物品的场景）
 menu->set_listener(
     [](endstone::Player &player, int slot,
        const endstone::ItemStack &item,
        inventoryui::UIInventory &inventory) -> std::function<void()> {
         player.sendMessage("slot {}: {}", slot, item.getType().getId());
-        return {};  // 不关闭物品栏
+        return {};  // 不关闭物品栏，自动刷新显示
     });
 
 // 需要关闭物品栏并打开新表单的示例
@@ -256,6 +256,39 @@ menu->set_open_listener([](endstone::Player &player) {
 menu->set_close_listener([](endstone::Player &player) {
     player.sendMessage("Menu closed");
 });
+```
+
+### 动态刷新物品栏
+
+当回调返回空函数时，物品栏会自动刷新显示。这适用于需要动态修改物品栏内容的场景，例如取出物品、购买商品等：
+
+```cpp
+menu->set_listener(
+    [&some_inventory](endstone::Player &player, int slot,
+                      const endstone::ItemStack &item,
+                      inventoryui::UIInventory &inventory) -> std::function<void()> {
+        // 将物品从某个库存移到玩家背包
+        auto& playerInv = player.getInventory();
+        auto remaining = playerInv.addItem(item);
+        
+        if (remaining.empty()) {
+            // 成功：从UI中移除物品
+            some_inventory.removeItem(std::vector{item});
+            
+            // 更新UI显示（set_item 会触发自动刷新）
+            if (auto newItem = some_inventory.getItem(slot); newItem.has_value()) {
+                inventory.set_item(slot, newItem.value());
+            } else {
+                inventory.set_item(slot, endstone::ItemStack("minecraft:air"));
+            }
+            
+            player.sendMessage("取出成功！");
+        } else {
+            player.sendMessage("背包已满！");
+        }
+        
+        return {};  // 不关闭物品栏，自动刷新显示
+    });
 ```
 
 ### 发送与关闭

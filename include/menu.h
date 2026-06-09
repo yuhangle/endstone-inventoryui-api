@@ -41,6 +41,8 @@ public:
     bool close(endstone::Player &player) override;
     void close_all() override;
 
+    void refresh_contents(endstone::Player &player) override { sendContents(player); }
+
     std::vector<std::shared_ptr<endstone::Player>> get_viewers() const override
     {
         // Not implemented — callers should use close_player / ActiveForms directly.

@@ -119,6 +119,9 @@ void EventListener::onPacketReceive(
                                 plugin_,
                                 [fn = std::move(deferred)]() { fn(); },
                                 10);
+                        } else {
+                            // 回调返回空函数，不关闭UI，刷新物品栏显示
+                            menu->sendContents(*player);
                         }
                         return;
                     }

@@ -222,13 +222,14 @@ The `item` parameter in the `set_listener()` callback is fully readable and writ
 // Click callback
 // Returns std::function<void()>: non-empty closes the inventory UI and
 //   executes the returned function after a 10-tick delay
-// Returns empty function (default): keeps the inventory open
+// Returns empty function (default): keeps the inventory open and auto-refreshes display
+//   (useful for dynamic inventory modification scenarios)
 menu->set_listener(
     [](endstone::Player &player, int slot,
        const endstone::ItemStack &item,
        inventoryui::UIInventory &inventory) -> std::function<void()> {
         player.sendMessage("slot {}: {}", slot, item.getType().getId());
-        return {};  // Keep inventory open
+        return {};  // Keep inventory open, auto-refresh display
     });
 
 // Example: close inventory and open a new form
@@ -257,6 +258,39 @@ menu->set_open_listener([](endstone::Player &player) {
 menu->set_close_listener([](endstone::Player &player) {
     player.sendMessage("Menu closed");
 });
+```
+
+### Dynamic Inventory Refresh
+
+When the callback returns an empty function, the inventory automatically refreshes its display. This is useful for scenarios requiring dynamic inventory modification, such as taking items, purchasing goods, etc.:
+
+```cpp
+menu->set_listener(
+    [&some_inventory](endstone::Player &player, int slot,
+                      const endstone::ItemStack &item,
+                      inventoryui::UIInventory &inventory) -> std::function<void()> {
+        // Move item from some inventory to player's inventory
+        auto& playerInv = player.getInventory();
+        auto remaining = playerInv.addItem(item);
+        
+        if (remaining.empty()) {
+            // Success: remove item from UI
+            some_inventory.removeItem(std::vector{item});
+            
+            // Update UI display (set_item triggers auto-refresh)
+            if (auto newItem = some_inventory.getItem(slot); newItem.has_value()) {
+                inventory.set_item(slot, newItem.value());
+            } else {
+                inventory.set_item(slot, endstone::ItemStack("minecraft:air"));
+            }
+            
+            player.sendMessage("Item taken successfully!");
+        } else {
+            player.sendMessage("Inventory full!");
+        }
+        
+        return {};  // Keep inventory open, auto-refresh display
+    });
 ```
 
 ### Sending and Closing
