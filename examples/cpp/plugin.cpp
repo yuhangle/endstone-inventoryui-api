@@ -2,9 +2,9 @@
 #include <endstone_inventoryui/inventoryui.h>
 
 /**
- * Example: consuming InventoryUI via ServiceManager (外置插件模式).
+ * Example: consuming InventoryUI via ServiceManager (external plugin mode).
  *
- * 内嵌模式（无需依赖 endstone_inventoryui.so）请参考 README 中的方式一：
+ * For embedded mode (no endstone_inventoryui.so required), see README:
  *   inventoryui::initialize_embedded(*this);
  *   auto menu = inventoryui::create_menu(inventoryui::MenuTypeId::CHEST, "Embedded");
  */
@@ -12,8 +12,9 @@ class InventoryUIExample : public endstone::Plugin {
 public:
     void onEnable() override
     {
-        auto *plugin_mgr = getServer().getPluginManager().getPlugin("inventoryui_api");
-        if (!plugin_mgr) {
+    if (const auto *plugin_mgr =
+            getServer().getPluginManager().getPlugin("inventoryui_api");
+        !plugin_mgr) {
             getLogger().warning("InventoryUI plugin not found!");
             getServer().getPluginManager().disablePlugin(*this);
             return;
@@ -26,32 +27,45 @@ public:
             return;
         }
 
-        auto menu = inventory_ui_->create_menu(inventoryui::MenuTypeId::CHEST, "C++ Menu");
+        const auto menu = inventory_ui_->create_menu(inventoryui::MenuTypeId::CHEST, "C++ Menu");
 
-        // 普通物品
-        auto inv = menu->get_inventory();
+        // Normal items
+        const auto inv = menu->get_inventory();
         inv->set_item(0, endstone::ItemStack("minecraft:diamond_sword"));
         inv->set_item(1, endstone::ItemStack("minecraft:diamond_axe"));
 
-        // 预编码物品（跳过 ItemStack，保留完整 NBT）
-        // nbt_bytes 为外部来源（如 world-inspector）提供的二进制 NBT 数据
+        // Pre-encoded items (bypass ItemStack, preserve full NBT)
+        // nbt_bytes: binary NBT data from external source (e.g. world-inspector)
         // inv->set_pre_encoded_item(2, "minecraft:diamond_helmet", 1, 0, nbt_bytes);
 
         menu->set_listener(
-            [](endstone::Player &player, int slot,
+            [](const endstone::Player &player, const int slot,
                const endstone::ItemStack &item,
                inventoryui::UIInventory &inventory) -> std::function<void()> {
                 player.sendMessage(
-                    "You clicked slot " + std::to_string(slot)
+                    "You clicked UI slot " + std::to_string(slot)
                     + " (" + item.getType().getId() + ")");
-                return {};  // 不关闭物品栏
+                return {};  // Keep inventory open
             });
 
-        menu->set_open_listener([](endstone::Player &player) {
+        // Player inventory callback (triggered when player clicks their own inventory while UI is open)
+        menu->set_player_inventory_listener(
+            [](const endstone::Player &player, const int slot,
+               const endstone::ItemStack &item,
+               const int container_id) -> std::function<void()> {
+                // container_id: 28=Hotbar, 29=Inventory, 12=Combined, 59=Cursor
+                player.sendMessage(
+                    "You clicked your inventory slot " + std::to_string(slot)
+                    + " (" + item.getType().getId() + ")"
+                    + " [container=" + std::to_string(container_id) + "]");
+                return {};  // Keep inventory open
+            });
+
+        menu->set_open_listener([](const endstone::Player &player) {
             player.sendMessage("Menu opened!");
         });
 
-        menu->set_close_listener([](endstone::Player &player) {
+        menu->set_close_listener([](const endstone::Player &player) {
             player.sendMessage("Menu closed!");
         });
 

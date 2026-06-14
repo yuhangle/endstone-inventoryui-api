@@ -36,6 +36,7 @@ public:
     void set_listener(SlotCallback callback) override { listener_ = std::move(callback); }
     void set_open_listener(PlayerCallback callback) override { open_listener_ = std::move(callback); }
     void set_close_listener(PlayerCallback callback) override { close_listener_ = std::move(callback); }
+    void set_player_inventory_listener(PlayerInventoryCallback callback) override { player_inventory_listener_ = std::move(callback); }
 
     void send_to(endstone::Player &player) override;
     bool close(endstone::Player &player) override;
@@ -58,6 +59,7 @@ public:
 
     const SlotCallback &getListener() const { return listener_; }
     const PlayerCallback &getCloseListener() const { return close_listener_; }
+    const PlayerInventoryCallback &getPlayerInventoryListener() const { return player_inventory_listener_; }
 
     // --- Internal helpers ---
 
@@ -78,4 +80,5 @@ private:
     SlotCallback listener_;
     PlayerCallback open_listener_;
     PlayerCallback close_listener_;
+    PlayerInventoryCallback player_inventory_listener_;
 };

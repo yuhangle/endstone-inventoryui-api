@@ -256,6 +256,16 @@ menu->set_open_listener([](endstone::Player &player) {
 menu->set_close_listener([](endstone::Player &player) {
     player.sendMessage("Menu closed");
 });
+
+// 玩家物品栏回调（当玩家在 UI 打开时点击自身物品栏触发）
+// container_id: 28=HotbarContainer, 29=InventoryContainer, 12=Combined, 59=Cursor
+menu->set_player_inventory_listener(
+    [](endstone::Player &player, int slot,
+       const endstone::ItemStack &item,
+       int container_id) -> std::function<void()> {
+        player.sendMessage("slot {}: {} [container={}]", slot, item.getType().getId(), container_id);
+        return {};  // 不关闭物品栏
+    });
 ```
 
 ### 动态刷新物品栏

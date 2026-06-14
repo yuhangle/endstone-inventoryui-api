@@ -57,6 +57,11 @@ public:
 
     using PlayerCallback = std::function<void(endstone::Player &player)>;
 
+    using PlayerInventoryCallback = std::function<std::function<void()>(
+        endstone::Player &player, int slot,
+        const endstone::ItemStack &item,
+        int container_id)>;
+
     [[nodiscard]] virtual std::string get_name() const = 0;
 
     virtual void set_name(const std::string &name) = 0;
@@ -69,13 +74,14 @@ public:
 
     virtual void set_close_listener(PlayerCallback callback) = 0;
 
+    virtual void set_player_inventory_listener(PlayerInventoryCallback callback) = 0;
+
     virtual void send_to(endstone::Player &player) = 0;
 
     virtual bool close(endstone::Player &player) = 0;
 
     virtual void close_all() = 0;
 
-    /// 刷新物品栏内容到客户端（修改物品后调用此方法更新显示）
     virtual void refresh_contents(endstone::Player &player) = 0;
 
     [[nodiscard]] virtual std::vector<std::shared_ptr<endstone::Player>> get_viewers() const = 0;

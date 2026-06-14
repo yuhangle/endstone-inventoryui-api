@@ -80,11 +80,25 @@ void EventListener::onPacketReceive(
                     action_type == ItemStackRequestActionType::Take ||
                     action_type == ItemStackRequestActionType::Place) {
                   const int slot = action_data_->source.slot;
-                  if (const int source_id =
-                          action_data_->source.container.container_enum;
-                      source_id != 7) continue;
+                  const int source_id = action_data_->source.container.container_enum;
 
-                    if (menu->getListener()) {
+                  // 容器ID定义
+                  constexpr int UI_CONTAINER = 7;           // LevelEntityContainer (虚拟箱子)
+                  constexpr int HOTBAR_CONTAINER = 28;      // HotbarContainer
+                  constexpr int INVENTORY_CONTAINER = 29;   // InventoryContainer
+                  constexpr int COMBINED_CONTAINER = 12;    // CombinedHotbarAndInventoryContainer
+                  constexpr int CURSOR_CONTAINER = 59;      // CursorContainer
+
+                  const bool is_ui_container = (source_id == UI_CONTAINER);
+                  const bool is_player_inventory = (source_id == HOTBAR_CONTAINER ||
+                                                     source_id == INVENTORY_CONTAINER ||
+                                                     source_id == COMBINED_CONTAINER ||
+                                                     source_id == CURSOR_CONTAINER);
+
+                  if (!is_ui_container && !is_player_inventory) continue;
+
+                  // UI物品栏回调
+                  if (is_ui_container && menu->getListener()) {
                     const auto item = menu->getInventoryRef().getItem(slot);
                       if (auto deferred = menu->getListener()(
                               *player, slot, item, menu->getInventoryRef())) {
@@ -124,7 +138,51 @@ void EventListener::onPacketReceive(
                             menu->sendContents(*player);
                         }
                         return;
+                  }
+
+                  // 玩家物品栏回调
+                  if (is_player_inventory && menu->getPlayerInventoryListener()) {
+                    // 从玩家自身物品栏获取物品
+                    auto &player_inv = player->getInventory();
+                    if (const auto item = player_inv.getItem(slot)) {
+                      if (auto deferred = menu->getPlayerInventoryListener()(
+                              *player, slot, *item, source_id)) {
+                        // 关闭物品栏UI，但不触发close_listener
+                        const auto player_name = player->getName();
+                        auto& forms1 = getActiveForms();
+                        if (const auto form_it = forms1.find(player_name);
+                            form_it != forms1.end()) {
+                            const auto *form2 = form_it->second.get();
+                            const auto pos = form2->pos;
+                            const auto is_pair = form2->is_pair;
+
+                            // 从ActiveForms移除
+                            forms1.erase(form_it);
+
+                            // 发送ContainerClose关闭客户端物品栏
+                            ContainerClosePacket close_pk;
+                            close_pk.container_id = Menu::CONTAINER_ID;
+                            close_pk.is_server_side = true;
+                            sendPacket(*player, close_pk);
+
+                            // 恢复假方块
+                            restoreBlock(*player, pos);
+                            if (is_pair) {
+                                restoreBlock(*player, BlockPos(pos.x + 1, pos.y, pos.z));
+                            }
+                        }
+
+                        // 延迟执行回调中的表单发送逻辑
+                        auto& scheduler = plugin_.getServer().getScheduler();
+                        scheduler.runTaskLater(
+                            plugin_,
+                            [deferred_fn = std::move(deferred)]() { deferred_fn(); },
+                            10);
+                      }
                     }
+                    // 玩家物品栏回调不刷新UI显示（因为UI内容未变化）
+                    return;
+                  }
                 }
             }
         }

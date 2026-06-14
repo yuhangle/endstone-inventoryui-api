@@ -258,6 +258,16 @@ menu->set_open_listener([](endstone::Player &player) {
 menu->set_close_listener([](endstone::Player &player) {
     player.sendMessage("Menu closed");
 });
+
+// Player inventory callback (triggered when player clicks their own inventory while UI is open)
+// container_id: 28=HotbarContainer, 29=InventoryContainer, 12=Combined, 59=Cursor
+menu->set_player_inventory_listener(
+    [](endstone::Player &player, int slot,
+       const endstone::ItemStack &item,
+       int container_id) -> std::function<void()> {
+        player.sendMessage("slot {}: {} [container={}]", slot, item.getType().getId(), container_id);
+        return {};  // Keep inventory open
+    });
 ```
 
 ### Dynamic Inventory Refresh
