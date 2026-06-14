@@ -67,14 +67,15 @@ struct ItemData {
 // ==================== ItemStackRequest types ====================
 
 struct ItemStackRequestActionType {
-    static constexpr int Invalid = 0;
-    static constexpr int Take = 1;
-    static constexpr int Place = 2;
-    static constexpr int Swap = 3;
-    static constexpr int Drop = 4;
-    static constexpr int Destroy = 5;
-    static constexpr int Consume = 6;
-    static constexpr int Create = 7;
+    // Bedrock protocol action type values (v685+)
+    static constexpr int Take = 0;
+    static constexpr int Place = 1;
+    static constexpr int Swap = 2;
+    static constexpr int Drop = 3;
+    static constexpr int Destroy = 4;
+    static constexpr int Create = 5;
+    static constexpr int PlaceInItem = 6;
+    static constexpr int TakeFromItem = 7;
     static constexpr int LabTableCombine = 8;
     static constexpr int BeaconPayment = 9;
     static constexpr int MineBlock = 10;
@@ -105,7 +106,7 @@ struct ItemStackRequestActionTransferBase {
 };
 
 struct ItemStackRequestAction {
-    int action_type = ItemStackRequestActionType::Invalid;
+    int action_type = -1;  // No default action type
     std::unique_ptr<ItemStackRequestActionTransferBase> action_data;
 
     void write(const BinaryStream &s) const;

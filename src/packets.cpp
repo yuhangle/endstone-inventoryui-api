@@ -86,8 +86,9 @@ void ItemData::read(const ReadOnlyBinaryStream &s)
         // Attempt to parse via Rust NBT
       const CompoundTag nbt;
         size_t consumed = 0;
-        int ret = bedrock_nbt_from_network_into(nbt.get(), remaining.data(), remaining.size(), &consumed);
-        if (ret == 0 && consumed > 0) {
+      if (const int ret = bedrock_nbt_from_network_into(
+              nbt.get(), remaining.data(), remaining.size(), &consumed);
+          ret == 0 && consumed > 0) {
             component_data = nbt.toNetworkNbt();
             s.setPosition(pos + consumed);
             return;
@@ -142,14 +143,41 @@ void ItemStackRequestAction::write(const BinaryStream &s) const
 void ItemStackRequestAction::read(const ReadOnlyBinaryStream &s)
 {
     action_type = s.getByte();
-    if (action_type == 0 ||
-        action_type == ItemStackRequestActionType::Take ||
+    // Take(0)/Place(1): amount + source + destination
+    if (action_type == ItemStackRequestActionType::Take ||
         action_type == ItemStackRequestActionType::Place)
     {
         auto data = std::make_unique<ItemStackRequestActionTransferBase>();
         data->read(s);
         action_data = std::move(data);
     }
+    // Swap(2): source + destination (no amount)
+    else if (action_type == ItemStackRequestActionType::Swap)
+    {
+        auto data = std::make_unique<ItemStackRequestActionTransferBase>();
+        data->amount = 0;
+        data->source.read(s);
+        data->destination.read(s);
+        action_data = std::move(data);
+    }
+    // Drop(3)/Destroy(4): source + amount + _count_id (varint)
+    else if (action_type == ItemStackRequestActionType::Drop ||
+             action_type == ItemStackRequestActionType::Destroy)
+    {
+        auto data = std::make_unique<ItemStackRequestActionTransferBase>();
+        data->source.read(s);
+        data->amount = s.getByte();
+        (void)s.getVarint();  // count_id
+        action_data = std::move(data);
+    }
+    // Create(5): amount
+    else if (action_type == ItemStackRequestActionType::Create)
+    {
+        auto data = std::make_unique<ItemStackRequestActionTransferBase>();
+        data->amount = s.getByte();
+        action_data = std::move(data);
+    }
+    // Other action types: no additional data
 }
 
 // ==================== ItemStackRequestData ====================
@@ -176,19 +204,31 @@ void ItemStackRequestData::read(const ReadOnlyBinaryStream &s)
 {
     is_parsable_action = true;
     client_request_id = s.getVarint();
-    auto actions_len = s.getUnsignedVarint();
+    const auto actions_len = s.getUnsignedVarint();
     request_actions.reserve(actions_len);
     for (uint32_t i = 0; i < actions_len; ++i) {
         ItemStackRequestAction action;
         action.read(s);
         request_actions.push_back(std::move(action));
     }
-    auto stf_len = s.getUnsignedVarint();
-    strings_to_filter.reserve(stf_len);
-    for (uint32_t i = 0; i < stf_len; ++i) {
-        strings_to_filter.push_back(s.getBytes());
+
+    // strings_to_filter may not be present in all protocol versions
+    if (const auto remaining = s.getSize() - s.getPosition(); remaining < 2) {
+        strings_to_filter_origin = 0;
+        return;
     }
-    strings_to_filter_origin = s.getSignedInt();
+
+    try {
+      const auto stf_len = s.getUnsignedVarint();
+        strings_to_filter.reserve(stf_len);
+        for (uint32_t i = 0; i < stf_len; ++i) {
+            strings_to_filter.push_back(s.getBytes());
+        }
+        strings_to_filter_origin = s.getSignedInt();
+    } catch (...) {
+        // Gracefully handle truncated strings_to_filter section
+        strings_to_filter_origin = 0;
+    }
 }
 
 // ==================== ItemStackRequest ====================

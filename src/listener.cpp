@@ -76,9 +76,9 @@ void EventListener::onPacketReceive(
             const int action_type = action_type_;
                 if (!action_data_) continue;
 
-                if (action_type == 0 ||
-                    action_type == ItemStackRequestActionType::Take ||
-                    action_type == ItemStackRequestActionType::Place) {
+                if (action_type == ItemStackRequestActionType::Take ||
+                    action_type == ItemStackRequestActionType::Place ||
+                    action_type == ItemStackRequestActionType::Swap) {
                   const int slot = action_data_->source.slot;
                   const int source_id = action_data_->source.container.container_enum;
 
@@ -89,11 +89,13 @@ void EventListener::onPacketReceive(
                   constexpr int COMBINED_CONTAINER = 12;    // CombinedHotbarAndInventoryContainer
                   constexpr int CURSOR_CONTAINER = 59;      // CursorContainer
 
+                  // source_id=0 在某些客户端中表示游标/全局物品栏
                   const bool is_ui_container = (source_id == UI_CONTAINER);
                   const bool is_player_inventory = (source_id == HOTBAR_CONTAINER ||
                                                      source_id == INVENTORY_CONTAINER ||
                                                      source_id == COMBINED_CONTAINER ||
-                                                     source_id == CURSOR_CONTAINER);
+                                                     source_id == CURSOR_CONTAINER ||
+                                                     source_id == 0);  // Cursor/global inventory
 
                   if (!is_ui_container && !is_player_inventory) continue;
 
@@ -142,11 +144,17 @@ void EventListener::onPacketReceive(
 
                   // 玩家物品栏回调
                   if (is_player_inventory && menu->getPlayerInventoryListener()) {
+                    // 映射协议槽位到 Endstone 玩家物品栏槽位
+                    // HotbarContainer(28): protocol 0-8 → Endstone 0-8
+                    // InventoryContainer(29): protocol 0-35 → Endstone 0-35 (绝对编号)
+                    // CombinedHotbarAndInventoryContainer(12): protocol 0-35 → Endstone 0-35
+                    int mapped_slot = slot;
+
                     // 从玩家自身物品栏获取物品
                     auto &player_inv = player->getInventory();
-                    if (const auto item = player_inv.getItem(slot)) {
+                    if (const auto item = player_inv.getItem(mapped_slot)) {
                       if (auto deferred = menu->getPlayerInventoryListener()(
-                              *player, slot, *item, source_id)) {
+                              *player, mapped_slot, *item, source_id)) {
                         // 关闭物品栏UI，但不触发close_listener
                         const auto player_name = player->getName();
                         auto& forms1 = getActiveForms();
